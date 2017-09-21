@@ -26,6 +26,7 @@ OUBridge <- function(model.params,start.value=start.value, end.value=end.value, 
 	#sigma<-model.params[3]
 	OUpath<-sde.sim(X0=start.value,drift=drift, sigma=diffusion, sigma.x=diffusion.x,N=N)
   t<-seq(t0,T,length=N+1)
+  #From Alison Etheridge. 1995. Stochastic partial differential equations. Cambridge University Press.
 	Lambda <- exp(-alpha*(T-t)) - exp(-alpha*(T+t))
 	Lambda <- Lambda/(1-exp(-2*alpha*T))
 	OUB <- OUpath - Lambda*(OUpath[N+1] - end.value)
@@ -78,7 +79,8 @@ ounegloglike_onepath<-function(model.params,path=path){
 			sigma<-model.params[3]
 	 		negloglike<- (length(path)+1)/2*log(pi*sigma^2)+path[1]^2/sigma^2
 	 		for(pathIndex in 2:length(path)){
-	 			negloglike<-negloglike+ 1/2*log(1-exp(-2*alpha))+(path[pathIndex]-mu-(path[pathIndex-1]-mu)*exp(-alpha))^2/(sigma^2*(1-exp(-2*alpha)))
+				#ref Bridge_NossanEvans2015.pdf formula (27), (38) for CIR but unknown contruction for bridge
+				negloglike<-negloglike+ 1/2*log(1-exp(-2*alpha))+(path[pathIndex]-mu-(path[pathIndex-1]-mu)*exp(-alpha))^2/(sigma^2*(1-exp(-2*alpha)))
 	 			}
 	 		return(negloglike)
 	 		}
@@ -97,42 +99,7 @@ ounegloglike<-function(model.params,phy=phy,path.data=path.data){
 	 return(sum(negloglike.array))
 	 }#end of loglike function
 
-plot.history<-function(phy=phy,path.data=path.data,main=main){
-    ntips<-length(phy$tip.label)
- 	  edge.number<-dim(phy$edge)[1]
-    x.start<-array(0,c(edge.number,1))
-    x.end<-array(0,c(edge.number,1))
-    step<-array(0,c(edge.number,1))
- 	  anc.des.start.end<-cbind(phy$edge,step,x.start, x.end)
- 	  colnames(anc.des.start.end)<-c("anc","des","step","x.start","x.end")
-    anc.des.start.end<-apply(anc.des.start.end,2,rev)
- 	  anc.des.start.end<-data.frame(anc.des.start.end)
-    anc<- anc.des.start.end$anc
-    des<- anc.des.start.end$des
- 	  for(edgeIndex in 1:edge.number){
-       path<-unlist(path.data[edgeIndex])
-       anc.des.start.end$step[edgeIndex]<-length(path)
- 	 		 }
-
-    for(edgeIndex in 1:edge.number){
-
-		  if(anc[edgeIndex]== Ntip(phy)+1){
-         anc.des.start.end$x.start[edgeIndex]<- 1+ ceiling(nodeheight(phy,node=anc.des.start.end$anc[edgeIndex]))
-         }else{
-         			anc.des.start.end$x.start[edgeIndex]<- ceiling(nodeheight(phy,node=anc.des.start.end$anc[edgeIndex]))
-			 				}
-				 anc.des.start.end$x.end[edgeIndex]<- 1 + ceiling(nodeheight(phy,node=anc.des.start.end$des[edgeIndex]))
-        }
-    plot( NA,type="l",xlim=c(1,ceiling(get.rooted.tree.height(phy))+1 ),ylim=c(min(unlist(path.data)), max(unlist(path.data))),ylab="Trait value", xlab="Time Steps",main=main)
-    for(edgeIndex in 1:edge.number){
-      path<-unlist(path.data[edgeIndex])
-      starting.x<-ceiling(nodeheight(phy,node=anc[edgeIndex]))
-        points((starting.x+1): (starting.x+length(path)),path,type="l")
-        }
-    abline(v=ceiling(get.rooted.tree.height(phy))+1)
-	  }#end of plot history
-
-model.params<-c(10,0.1,3)
+model.params<-c(10,1,2)
 names(model.params)<-c("mu","alpha","sigma")
 size<-10
 min.time.step<-5
@@ -141,17 +108,30 @@ while(min(phy$edge.length)<min.time.step){
   phy$edge.length<-1.001*phy$edge.length
   }
 print(phy$edge.length)
-tip.states<-rnorm(size,sd=10)
 drift.diffusion<-DriftDiffusion(model.params)
 expression.drift<-drift.diffusion$expression.drift
 expression.diffusion<-drift.diffusion$expression.diffusion
 expression.diffusion.x<-drift.diffusion$expression.diffusion.x
-# function.drift<-drift.diffusion$function.drift
-# function.diffusion<-drift.diffusion$function.diffusion
-path.data<-sim.ou.path(model.params, phy=phy, tip.states=tip.states, SE=NULL, drift=expression.drift, diffusion=expression.diffusion, diffusion.x=expression.diffusion.x)
-#print(path.data)
 par(mfrow=c(1,2))
 plot(phy)
+tip.states<-rnorm(size,sd=1)
+
+loop.size<-100
+onepath.like.array<-array(0,c(loop.size))
+for (i in seq(loop.size)) {
+if(i %% 100 ==0){print(i)}
+path.data<-sim.ou.path(model.params, phy=phy, tip.states=tip.states, SE=NULL, drift=expression.drift, diffusion=expression.diffusion, diffusion.x=expression.diffusion.x)
+#print(ounegloglike_onepath(model.params,path=unlist(path.data[1])))
+onepath.like.array[i] <- ounegloglike_onepath(model.params,path=unlist(path.data[1]))
+}
+print(mean(onepath.like.array))
+
+
+
+source("~/GitHub/BridgePCM/plot_history.r")
 plot.history(phy=phy,path.data=path.data,main="OUB")
-print(ounegloglike_onepath(model.params,path=unlist(path.data[1])))
 print(ounegloglike(model.params,phy=phy,path.data=path.data))
+true.tip.states<-tip.states
+true.path.data<-path.data
+optim(model.params,ounegloglike_onepath, method="L-BFGS-B", lower=c(-10,1e-8,1e-8),upper=Inf,path=unlist(path.data[1]))
+optim(model.params,ounegloglike,method="L-BFGS-B",lower=c(-10,1e-8,1e-8),upper=Inf, phy=phy, path=path.data)
