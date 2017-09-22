@@ -80,7 +80,7 @@ sim.cir.path.tree<-function(model.params,phy=phy,N=N,root=root){
 
 
         path[seq(1, anc.des.start.end$step[edgeIndex], by = gap)  # we need to find a better way to sample this and get right number with x - axis
-
+         #path[sample(    )    ]  LOOK UP SAMPLE FOR GOOD
 
 
         ],type="l")
