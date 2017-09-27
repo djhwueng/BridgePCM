@@ -63,7 +63,7 @@ sim.ou.tree.path<-function(model.params, phy=phy, tip.states=tip.states, N=N, SE
 	anc.states<-condOU(model.params,phy=phy,tip.states=tip.states)$condmean
   full.node.data<-c(tip.states,anc.states)
 	path.objects<- list()
-	for(edgeIndex in edge.number:1){
+	for(edgeIndex in 1:edge.number){
       brlen<-edge.length[edgeIndex]
       end.value<-full.node.data[des[edgeIndex]]
 			start.value<-full.node.data[anc[edgeIndex]]
@@ -108,54 +108,148 @@ first.order.ounegloglike.onepath<-function(alpha,path=path,T=T,N=N){
 	    }
 	    return(negloglike)
 	  }
+
 #so far onepath ounegloglike optimization works well using first order method.
 #when move to tree case, we shall be able to use first order method.
 first.order.ounegloglike.tree<-function(alpha,phy=phy,path.data=path.data, N=N){
-	  badval<-(0.5)*.Machine$double.xmax
- 		edge.number<-dim(phy$edge)[1]
-    edge.length<-phy$edge.length
-		negloglike.array<-array(0,c(edge.number))
- 		for(edgeIndex in edge.number:1){
-			brlen<-edge.length[edgeIndex]
-   		path<-unlist(path.data[edgeIndex])
-   		negloglike.array[edgeIndex]<- first.order.ounegloglike.onepath(alpha,path=path,T=brlen,N=N)
-   		}
- 		return(sum(negloglike.array))
- 		}#end of loglike function
+  badval<-(0.5)*.Machine$double.xmax
+	edge.number<-dim(phy$edge)[1]
+  edge.length<-phy$edge.length
+	negloglike.array<-array(0,c(edge.number))
+	for(edgeIndex in edge.number:1){
+		brlen<-edge.length[edgeIndex]
+ 		path<-unlist(path.data[edgeIndex])
+ 		negloglike.array[edgeIndex]<- first.order.ounegloglike.onepath(alpha,path=path,T=brlen,N=N)
+ 		}
+	return(sum(negloglike.array))
+	}#end of loglike function
 
-N=5
+
+ounegloglike.onepath<-function(model.params,path=path,T=T,N=N){
+  mu<-model.params[1]
+	alpha<-model.params[2]
+	sigma<-model.params[3]
+	dt<-T/N
+	negloglike<- N/2*log(sigma^2/(2*alpha))
+	for(Index in 2:(N+1)) {
+		negloglike <- negloglike + 1/2*log(1-exp(-2*alpha*dt))
+		negloglike <- negloglike + alpha/sigma^2*(path[Index] - mu - (path[Index-1] - mu)*exp(-alpha*dt))^2/(1-exp(-2*alpha*dt))
+		}
+		return(negloglike)
+	}
+
+ounegloglike.tree<-function(model.params,phy=phy,path.data=path.data,N=N){
+	badval<-(0.5)*.Machine$double.xmax
+	mu<-model.params[1]
+	alpha<-model.params[2]
+	sigma<-model.params[3]
+	edge.number<-dim(phy$edge)[1]
+	edge.length<-phy$edge.length
+	negloglike<-0
+	for(edgeIndex in edge.number:1){
+		brlen<-edge.length[edgeIndex]
+		path<-unlist(path.data[edgeIndex])
+		negloglike<-negloglike+ounegloglike.onepath(model.params,path=path,T=brlen,N=N)
+		}
+  if(alpha<0 || alpha > 100 || sigma<0 || !is.finite(negloglike) ){
+		negloglike<-badval
+		}
+  return(negloglike)
+	}
+
+
+plot.history.dt<-function(phy=phy,path.data=path.data,main=main){
+    ntips<-length(phy$tip.label)
+    edge.number<-dim(phy$edge)[1]
+    x.start<-array(0,c(edge.number,1))
+    x.end<-array(0,c(edge.number,1))
+    step<-array(0,c(edge.number,1))
+    anc.des.start.end<-cbind(phy$edge,step,x.start, x.end)
+    colnames(anc.des.start.end)<-c("anc","des","step","x.start","x.end")
+    anc.des.start.end<-apply(anc.des.start.end,2,rev)
+    anc.des.start.end<-data.frame(anc.des.start.end)
+    anc<- anc.des.start.end$anc
+    des<- anc.des.start.end$des
+    for(edgeIndex in 1:edge.number){
+       path<-unlist(path.data[edgeIndex])
+       anc.des.start.end$step[edgeIndex]<-length(path)
+       }
+    plot( NA,type="l",xlim=c(1,ceiling(get.rooted.tree.height(phy))+1 ),ylim=c(min(unlist(path.data)), max(unlist(path.data))),ylab="Trait value", xlab="Time Steps",main=main)
+    abline(a=1e-8,b=0,lty=2)
+
+    for(edgeIndex in 1:edge.number){
+      if(anc[edgeIndex]== Ntip(phy)+1){
+         anc.des.start.end$x.start[edgeIndex]<- 1+ round(nodeheight(phy,node=anc.des.start.end$anc[edgeIndex]))
+         }else{
+              anc.des.start.end$x.start[edgeIndex]<- 1+ceiling(nodeheight(phy,node=anc.des.start.end$anc[edgeIndex]))
+              }
+              anc.des.start.end$x.end[edgeIndex]<- 1 + ceiling(nodeheight(phy,node=anc.des.start.end$des[edgeIndex]))
+          }
+    anc.des.start.end
+    for(edgeIndex in 1:edge.number){
+      path<-unlist(path.data[edgeIndex])
+      #starting.x<-ceiling(nodeheight(phy,node=anc[edgeIndex]))
+      x.start <-  anc.des.start.end$x.start[edgeIndex]
+      x.end   <-  anc.des.start.end$x.end[edgeIndex]
+      gap <- round(anc.des.start.end$step[edgeIndex]/( x.end-x.start))
+      #points((starting.x+1): (starting.x+length(path)),path[seq(1, anc.des.start.end$step[edgeIndex], by = gap)],type="l")
+      point.to.use<-(anc.des.start.end$x.start[edgeIndex]: anc.des.start.end$x.end[edgeIndex])
+      sample.path<-path[seq(1,  anc.des.start.end$step[edgeIndex],by=gap)]
+#        print("before")
+#        print( c(length(point.to.use), length(sample.path) ) )
+      if(length(point.to.use)!=length(sample.path)){
+          if(length(point.to.use) > length(sample.path)){
+            point.to.use<-point.to.use[1:length(sample.path)]
+            #sample.path<-c(sample.path,sample.path[length(sample.path)])
+          }else{
+            sample.path<-sample.path[1:length(point.to.use)]
+            #point.to.use<-c(point.to.use, point.to.use[length(point.to.use)]+1 )
+            }
+        }
+#        print("After")
+#        print( c(length(point.to.use), length(sample.path) ) )
+      points(point.to.use , sample.path, type="l",lwd=1.5)
+      #path[seq(1, anc.des.start.end$step[edgeIndex], by = gap)  # we need to find a better way to sample this and get right number with x - axis
+       #path[sample(    )    ]  LOOK UP SAMPLE FOR GOOD
+        }
+    }#end of plot history
+
+
+N=2000
 model.params<-c(10,0.1,4)
 names(model.params)<-c("mu","alpha","sigma")
 tree.size<-3
-min.time.step<-5
 phy<-rcoal(tree.size)
-#while(min(phy$edge.length)<min.time.step){
-#  phy$edge.length<-1.001*phy$edge.length
-#  }
-#print(phy$edge.length)
+phy<-reorder(phy,"postorder")
+min.length<-N/50
+while(min(phy$edge.length)<min.length){
+  phy$edge.length<-1.005*phy$edge.length
+  }
 tip.states<-rnorm(tree.size,sd=1)
 path.data<-sim.ou.tree.path(model.params, phy=phy, tip.states=tip.states, N=N, SE=NULL)
-#source("~/GitHub/BridgePCM/plot_history.r")
-#par(mfrow=c(1,2))
+#source("~/GitHub/BridgePCM/plot_history_dt.r")
+par(mfrow=c(1,2))
 plot(phy)
-#plot.history(phy=phy,path.data=path.data,main="OUB")
+plot.history.dt(phy=phy,path.data=path.data,main="OUB")
+#path.data
 print(first.order.ounegloglike.tree(0.1,phy=phy,path.data=path.data,N=N))
-path.data
-phy$edge.length
+print(ounegloglike.tree(model.params,phy=phy,path.data=path.data,N=N))
+#path.data
+#phy$edge.length
 
-?optimize
-optimize(first.order.ounegloglike.tree,c(0,1000000),phy=phy,path.data=path.data,N=N)
-#no good for alphas, we do not have 
-
-edge.number<-dim(phy$edge)[1]
-edge.length<-phy$edge.length
-negloglike.array<-array(0,c(edge.number))
-alpha<-0.1
-for(edgeIndex in edge.number:1){
-  path<-unlist(path.data[edgeIndex])
-  brlen<-edge.length[edgeIndex]
-  mu.hat<-first.order.mu(alpha,path=path,T=brlen,N=N)
-  sigma.sq.hat<-first.order.sigma.sq(alpha,path=path,T=brlen,N=N)
-  print(c(mu.hat,sigma.sq.hat))
-}
+# #?optimize
+#optimize(first.order.ounegloglike.tree,c(0,1000000),phy=phy,path.data=path.data,N=N)
+# #no good for alphas, we do not have
+#
+# edge.number<-dim(phy$edge)[1]
+# edge.length<-phy$edge.length
+# negloglike.array<-array(0,c(edge.number))
+# alpha<-0.1
+# for(edgeIndex in edge.number:1){
+#   path<-unlist(path.data[edgeIndex])
+#   brlen<-edge.length[edgeIndex]
+#   mu.hat<-first.order.mu(alpha,path=path,T=brlen,N=N)
+#   sigma.sq.hat<-first.order.sigma.sq(alpha,path=path,T=brlen,N=N)
+#   print(c(mu.hat,sigma.sq.hat))
+# }
 #single path case estimate well, but tree case not.......yet
