@@ -54,6 +54,7 @@ condOU <- function(model.params, phy=phy, tip.states=tip.states) {
 	return(list(condmean = condmean, condvar = condvar))
 	}
 
+#we estimate ancestor first, so we have nodes value for tree. Then we do bridge likelihood for parameter estimation.
 sim.ou.tree.path<-function(model.params, phy=phy, tip.states=tip.states, N=N, SE=NULL){
 	ntips<-length(phy$tip.label)
 	edge.number<-dim(phy$edge)[1]
@@ -74,6 +75,10 @@ sim.ou.tree.path<-function(model.params, phy=phy, tip.states=tip.states, N=N, SE
 		return(path.objects)
 		}#end of function
 
+
+#
+# first order work very well for each branch as it is the 1D case.
+# but likelihood given paths of tree yet to determine.
 first.order.mu<-function(alpha,path=path, T=T, N=N){
 	  dt<-T/N
 	  A<-0
@@ -110,7 +115,7 @@ first.order.ounegloglike.onepath<-function(alpha,path=path,T=T,N=N){
 	  }
 
 #so far onepath ounegloglike optimization works well using first order method.
-#when move to tree case, we shall be able to use first order method.
+#when move to tree case, we shall be able to use first order method, however, yet to find a method to do.
 first.order.ounegloglike.tree<-function(alpha,phy=phy,path.data=path.data, N=N){
   badval<-(0.5)*.Machine$double.xmax
 	edge.number<-dim(phy$edge)[1]
@@ -126,14 +131,21 @@ first.order.ounegloglike.tree<-function(alpha,phy=phy,path.data=path.data, N=N){
 
 
 ounegloglike.onepath<-function(model.params,path=path,T=T,N=N){
-  mu<-model.params[1]
+  badval<-(0.5)*.Machine$double.xmax
+	mu<-model.params[1]
 	alpha<-model.params[2]
 	sigma<-model.params[3]
+	if(alpha<0 || alpha>100 || sigma<0){
+		return(badval)
+		}
 	dt<-T/N
 	negloglike<- N/2*log(sigma^2/(2*alpha))
 	for(Index in 2:(N+1)) {
 		negloglike <- negloglike + 1/2*log(1-exp(-2*alpha*dt))
 		negloglike <- negloglike + alpha/sigma^2*(path[Index] - mu - (path[Index-1] - mu)*exp(-alpha*dt))^2/(1-exp(-2*alpha*dt))
+		}
+	if (!is.finite(negloglike)){
+		return(badval)
 		}
 		return(negloglike)
 	}
@@ -152,7 +164,7 @@ ounegloglike.tree<-function(model.params,phy=phy,path.data=path.data,N=N){
 		negloglike<-negloglike+ounegloglike.onepath(model.params,path=path,T=brlen,N=N)
 		}
   if(alpha<0 || alpha > 100 || sigma<0 || !is.finite(negloglike) ){
-		negloglike<-badval
+		return(badval)
 		}
   return(negloglike)
 	}
@@ -225,7 +237,7 @@ min.length<-N/50
 while(min(phy$edge.length)<min.length){
   phy$edge.length<-1.005*phy$edge.length
   }
-tip.states<-rnorm(tree.size,sd=1)
+tip.states<-rnorm(tree.size,mean=10,sd=10)
 path.data<-sim.ou.tree.path(model.params, phy=phy, tip.states=tip.states, N=N, SE=NULL)
 #source("~/GitHub/BridgePCM/plot_history_dt.r")
 par(mfrow=c(1,2))
@@ -234,6 +246,8 @@ plot.history.dt(phy=phy,path.data=path.data,main="OUB")
 #path.data
 print(first.order.ounegloglike.tree(0.1,phy=phy,path.data=path.data,N=N))
 print(ounegloglike.tree(model.params,phy=phy,path.data=path.data,N=N))
+
+print(optim(par=model.params,ounegloglike.tree, method="Nelder-Mead",phy=phy,path.data=path.data,N=N))
 #path.data
 #phy$edge.length
 
