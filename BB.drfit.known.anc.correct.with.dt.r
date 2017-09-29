@@ -66,7 +66,7 @@ bbdriftnegloglike.onepath<-function(model.params,path=path,T=T,N=N){
     return(badval)
     }
   dt<-T/N
-  negloglike<-N/2*log(dt*sigma^2)
+  negloglike<- (N+1)/2*log(dt*sigma^2) +  1/2/dt/sigma^2*(path[1]-mu*dt)^2
   for(pathIndex in 2:length(path)){
     negloglike<-negloglike+1/2/dt/sigma^2*(path[pathIndex]-path[pathIndex-1]-mu*dt)^2 #see reference problem 3 ,4
     }
@@ -147,10 +147,10 @@ plot.history.dt<-function(phy=phy,path.data=path.data,main=main){
         }
     }#end of plot history
 
-N=10000
-model.params<-c(0,1)
+N=2000
+model.params<-c(10,1)
 names(model.params)<-c("mu","sigma")
-tree.size<-3
+tree.size<-2
 phy<-rcoal(tree.size)
 phy<-reorder(phy,"postorder")
 min.length<-N/50

@@ -51,7 +51,7 @@ bbnegloglike.onepath<-function(sigma,path=path,T=T,N=N){
   badval<-(0.5)*.Machine$double.xmax
   if(sigma<0){return(badval)}
   dt<-T/N
-  negloglike<- N/2*log(dt*sigma^2)
+  negloglike<- (N+1)/2*log(dt*sigma^2) + 1/2/dt/sigma^2*(path[1])^2
   for(pathIndex in 2:length(path)){
     negloglike <- negloglike+ 1/(2*dt*sigma^2)*(path[pathIndex]-path[pathIndex-1])^2
     }
@@ -83,6 +83,7 @@ bbnegloglike.tree.v2<-function(sigma,phy=phy,path.data=path.data,N=N){
     brlen<-edge.length[edgeIndex]
     dt<-brlen/N
     path<-unlist(path.data[edgeIndex])
+    negloglike<-negloglike+ 0.5/dt/sigma^2*(path[1])^2
     for(pathIndex in 2:length(path)){
       negloglike<-negloglike+1/2*log(2*pi*dt)+ log(sigma)+0.5/dt/sigma^2*(path[pathIndex]-path[pathIndex-1])^2
      }
@@ -147,9 +148,9 @@ plot.history.dt<-function(phy=phy,path.data=path.data,main=main){
         }
     }#end of plot history
 
-N<-2000
+N<-10000
 sigma<-1
-tree.size<-5
+tree.size<-3
 phy<-rcoal(tree.size)
 phy<-reorder(phy,"postorder")
 min.length<-N/50
