@@ -1,4 +1,3 @@
-
 rm(list=ls())
 library(ape)
 library(geiger)
@@ -6,8 +5,7 @@ library(mvMORPH)
 library(phytools)
 library(phangorn)
 library(phyclust)
-
-#Euler scheule
+#Euler
 sim.bb.one.path<-function (sigma, T = T, N = N, start.value=start.value, end.value=end.value){
 #    if (T <= t0)
 #    stop("wrong times")
@@ -20,6 +18,15 @@ sim.bb.one.path<-function (sigma, T = T, N = N, start.value=start.value, end.val
     return(invisible(path))
     }
 
+sigma<-1
+T=0.356
+N=100
+start.value=10
+end.value=10
+path=sim.bb.one.path(sigma,T,N,start.value,end.value)
+print(path)
+plot(path)
+
 sim.bb.tree.path<-function(sigma, phy=phy, tip.states=tip.states, N=N){
   anc.list<-ace(x=tip.states,phy=phy)
   full.node.data<-c(tip.states,anc.list$ace)
@@ -28,24 +35,25 @@ sim.bb.tree.path<-function(sigma, phy=phy, tip.states=tip.states, N=N){
   ntips<-length(phy$tip.label)
   edge.number<-dim(phy$edge)[1]
   edge.length<-phy$edge.length
-  path.objects<-list()
+  path.data<-list()
   for(edgeIndex in edge.number:1){
 #    edgeIndex<-1
     brlen<-edge.length[edgeIndex]
     end.value<-full.node.data[des[edgeIndex]]
     start.value<-full.node.data[anc[edgeIndex]]
     assign(paste("path",edgeIndex,sep=""),sim.bb.one.path(sigma,T=brlen,N=N,start.value=start.value, end.value=end.value))
-    path.objects<-c(path.objects,list(get(paste("path",edgeIndex,sep=""))))
+    path.data<-c(path.data,list(get(paste("path",edgeIndex,sep=""))))
     }
-  return(path.objects)
+  return(path.data)
   }
 
 bbnegloglike.onepath<-function(sigma,path=path,T=T,N=N){
   badval<-(0.5)*.Machine$double.xmax
   if(sigma<0){return(badval)}
   dt<-T/N
-  negloglike<- 1/2*log(2*pi*dt)+1/2*log(sigma^2)
+  negloglike<- N/2*log(dt*sigma^2)
   for(pathIndex in 2:length(path)){
+
     negloglike <- negloglike+ 1/(2*dt*sigma^2)*(path[pathIndex]-path[pathIndex-1])^2
     }
   return(negloglike)
@@ -56,28 +64,31 @@ bbnegloglike.tree<-function(sigma,phy=phy,path.data=path.data,N=N){
   edge.number<-dim(phy$edge)[1]
   edge.length<-phy$edge.length
   negloglike<-0
-  if(sigma<0 || !is.finite(negloglike)){return(badval)}
+  if(sigma<0){return(badval)}
   for(edgeIndex in edge.number:1){
     brlen<-edge.length[edgeIndex]
     path<-unlist(path.data[edgeIndex])
     negloglike<-negloglike+bbnegloglike.onepath(sigma,path=path,T=brlen,N=N)
     }
+    if(!is.finite(negloglike)){return(badval)}
   return(negloglike)
   }
 
 bbnegloglike.tree.v2<-function(sigma,phy=phy,path.data=path.data,N=N){
   badval<-(0.5)*.Machine$double.xmax
+  if(sigma<0){return(badval)}
   edge.number<-dim(phy$edge)[1]
   edge.length<-phy$edge.length
   negloglike<-0
-  if(sigma<0 || !is.finite(negloglike)){return(badval)}
   for(edgeIndex in edge.number:1){
     brlen<-edge.length[edgeIndex]
+    dt<-brlen/N
     path<-unlist(path.data[edgeIndex])
     for(pathIndex in 2:length(path)){
-    negloglike<-negloglike+1/2*log(2*pi)+1/2*log(sigma^2)+1/(2*sigma^2)*(path[pathIndex]-path[pathIndex-1])^2
+      negloglike<-negloglike+1/2*log(2*pi*dt)+ log(sigma)+0.5/dt/sigma^2*(path[pathIndex]-path[pathIndex-1])^2
      }
     }
+  if(!is.finite(negloglike)){return(badval)}
   return(negloglike)
   }
 
@@ -138,8 +149,8 @@ plot.history.dt<-function(phy=phy,path.data=path.data,main=main){
     }#end of plot history
 
 N<-2000
-sigma<-10
-tree.size<-3
+sigma<-1
+tree.size<-5
 phy<-rcoal(tree.size)
 phy<-reorder(phy,"postorder")
 min.length<-N/50
