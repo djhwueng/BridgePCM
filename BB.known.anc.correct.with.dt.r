@@ -18,14 +18,14 @@ sim.bb.one.path<-function (sigma, T = T, N = N, start.value=start.value, end.val
     return(invisible(path))
     }
 
-sigma<-1
-T=0.356
-N=100
-start.value=10
-end.value=10
-path=sim.bb.one.path(sigma,T,N,start.value,end.value)
-print(path)
-plot(path)
+# sigma<-1
+# T=0.356
+# N=100
+# start.value=10
+# end.value=10
+# path=sim.bb.one.path(sigma,T,N,start.value,end.value)
+# print(path)
+# plot(path)
 
 sim.bb.tree.path<-function(sigma, phy=phy, tip.states=tip.states, N=N){
   anc.list<-ace(x=tip.states,phy=phy)
@@ -53,7 +53,6 @@ bbnegloglike.onepath<-function(sigma,path=path,T=T,N=N){
   dt<-T/N
   negloglike<- N/2*log(dt*sigma^2)
   for(pathIndex in 2:length(path)){
-
     negloglike <- negloglike+ 1/(2*dt*sigma^2)*(path[pathIndex]-path[pathIndex-1])^2
     }
   return(negloglike)
