@@ -1,4 +1,5 @@
 rm(list=ls())
+
 library(ape)
 library(sde)
 library(geiger)
@@ -6,16 +7,47 @@ library(mvMORPH)
 library(phytools)
 library(phangorn)
 library(phyclust)
-modified.BBridge<-function (sigma,x = 0, y = 0, t0 = 0, T = 1, N = 100){
-    if (T <= t0)
+
+modified.BBridge <- function(sigma, x = 0, y = 0, t0 = 0, T = 1, N = 100){
+  if (T <= t0)
         stop("wrong times")
-    dt <- 1#(T - t0)/N #dt will be difference given difference brnlen, but overall we want 100 step on each brnlen
+    dt <- 1# (T - t0)/N #dt will be difference given difference brnlen, but overall we want 100 step on each brnlen
+    # 
+    # x=start.state
+    # y=end.state
+    # t0=0
+    # T=brnlen
+    # N=100
+    # sigma<-2
+    #print(dt)
     t <- seq(t0, T, length = N+1)
     X <- c(0, cumsum(rnorm(N) * sqrt(dt)))
     BB <- x + X - (t - t0)/(T - t0) * (X[N + 1] - y + x)
-    X <- ts(BB, start = t0, deltat = dt)
-    return(invisible(sigma*X))
-    }
+#    print("here is sigma")
+#    print(sigma)
+#    print(BB)
+#    print(BB)
+#    BB<-c(sigma*BB)
+#    X <- ts(BB, start = t0, deltat = dt)
+#    return(invisible(X))
+     return(sigma*BB)
+     }
+
+# sigma<-12
+# single.path<-modified.BBridge(sigma, x = 0, y = 0, t0 = 0, T = 1, N = 100)
+# #sd(single.path)
+# plot(single.path)
+# 
+# testloglike<-function(sigma){
+#   negloglike<-0
+#   path<-unlist(single.path)
+#   for(pathIndex in 2:length(path)){
+#       negloglike<-negloglike+ 1/2*log(2*pi)+1/2*2*log(sigma)+1/(2*sigma^2)*(path[pathIndex]-path[pathIndex-1])^2
+#       }
+#   return(negloglike)
+#   }
+# 
+# optimize(testloglike,c(0,100))
 
 sim.bb.path<-function(sigma,tip.states=tip.states,phy=phy,SE=NULL){ #SE is for tips
     anc.list<-ace(x=tip.states,phy=phy)
@@ -28,12 +60,13 @@ sim.bb.path<-function(sigma,tip.states=tip.states,phy=phy,SE=NULL){ #SE is for t
     path.data <- list()
 
     for(edgeIndex in edge.number:1){
+      
       brnlen<- edge.length[edgeIndex]    #here could be amplified for checking issues
       end.state<- full.node.data[des[edgeIndex]] #can do sampling here
       start.state<-full.node.data[anc[edgeIndex]] #can do sampling here
       if(anc[edgeIndex]!=Ntip(phy)+1){
-      assign(paste("path",edgeIndex,sep=""),modified.BBridge(sigma,x=start.state,y=end.state,t0=0,T=ceiling(brnlen)-1,N=ceiling(brnlen)-1))}else{
-        assign(paste("path",edgeIndex,sep=""),modified.BBridge(sigma,x=start.state,y=end.state,t0=0,T=ceiling(brnlen),N=ceiling(brnlen)))
+      assign(paste("path",edgeIndex,sep=""),modified.BBridge(sigma,x=start.state,y=end.state,t0=0,T=brnlen,N=100))}else{
+      assign(paste("path",edgeIndex,sep=""),modified.BBridge(sigma,x=start.state,y=end.state,t0=0,T=brnlen,N=100))
       }
       path.data<-c(path.data,list(get(paste("path",edgeIndex,sep=""))))
       }
@@ -94,48 +127,107 @@ bmnegloglike<-function(sigma,phy=phy,path.data=path.data){
       	 for(pathIndex in 2:length(path)){
              negloglike<-negloglike+ 1/2*log(2*pi)+1/2*2*log(sigma)+1/(2*sigma^2)*(path[pathIndex]-path[pathIndex-1])^2
              }
-        print(negloglike)
+#        print(negloglike)
         }
       return(negloglike)
       }#end of loglike function
 
+size<-30
+phy<-rcoal(size)
+while(min(phy$edge.length)<10){
+   phy$edge.length<-1.005*phy$edge.length
+   }
+phy$edge.length
+plot(phy)
+tip.states<-rnorm(size,sd=10)
 
-phy <- read.nexus("/Users/djhwueng/Dropbox/CollabJhwueng_pcmBridge/rcode/figITS.tre")
+if(min(phy$edge.length)<1){
+  if(min(phy$edge.length)==0){ phy$edge.length[which(phy$edge.length==0)]<-1e-5 }
+  phy$edge.length <-  phy$edge.length *(1/min(phy$edge.length)+1)
+  }
 
-traits<-read.csv("/Users/djhwueng/Dropbox/CollabJhwueng_pcmBridge/rcode/figITS.csv")
-head(traits)
-
-tip.states<-traits$wallwidth
-names(tip.states)<-phy$tip.label
-geiger.results<-fitContinuous(phy, tip.states, model="BM")
-ls(geiger.results)
-geiger.results$bnd
-geiger.results$lik
-sigma<-geiger.results$opt$sigsq
-geiger.results$opt$z0
-typeof(sigma)
-
-
-#####FIXED path.data
+sigma<-200
+tip.states<-rnorm(size,sd=10)
 path.data<-sim.bb.path(sigma,tip.states=tip.states,phy=phy)
 
+plot.history(phy=phy,path.data=path.data,main="Test BB") #finish plotting
 print(bmnegloglike(sigma,phy=phy,path.data=path.data))
+optimize(bmnegloglike,c(0,1000),phy=phy,path.data=path.data)
 
 
-optimize(bmnegloglike,c(0,100),phy=phy,path.data=path.data)
+####Data 1 good, paramter estimate is closed to geiger
+phy <- read.tree("~/Dropbox/CollabHoJhwueng/data/Molina_Borja.et.al_2003/tree.phy")
+plot(phy)
 
-
-# sigma <- 1
-# size<-3
-# phy<-rcoal(size)
+# if(min(phy$edge.length)<1){
+#   if(min(phy$edge.length)==0){ phy$edge.length[which(phy$edge.length==0)]<-1e-5 }
+#   phy$edge.length <-  phy$edge.length *(1/min(phy$edge.length)+1)
+#   }
+# 
 # while(min(phy$edge.length)<10){
 #   phy$edge.length<-1.005*phy$edge.length
 #   }
-# phy$edge.length
-# plot(phy)
-# tip.states<-rnorm(size,sd=10)
-# path.data<-sim.bb.path(sigma,tip.states=tip.states,phy=phy)
+
+plot(phy)
+traits<-read.csv("~/Dropbox/CollabHoJhwueng/data/Molina_Borja.et.al_2003/trait.csv")
+head(traits)
+tip.states<-traits$HatchingMass
+names(tip.states)<-phy$tip.label
+geiger.results<-fitContinuous(phy, tip.states, model="BM")
+geiger.results$lik
+sigma<-geiger.results$opt$sigsq
+sigma
+path.data<-sim.bb.path(sigma,tip.states=tip.states,phy=phy)
+result <-optimize(bmnegloglike,c(0,100),phy=phy,path.data=path.data)
+result   
+ 
+####Data 2 good, paramter estimate is closed to geiger
+phy <- read.tree("~/Dropbox/CollabHoJhwueng/data/Niewiarowski.et.al_2004/tree.phy")
+plot(phy)
+
+# if(min(phy$edge.length)<1){
+#   if(min(phy$edge.length)==0){ phy$edge.length[which(phy$edge.length==0)]<-1e-5 }
+#   phy$edge.length <-  phy$edge.length *(1/min(phy$edge.length)+1)
+# }
 # 
-# plot.history(phy=phy,path.data=path.data,main="Test BB") #finish plotting
-# print(bmnegloglike(sigma,phy=phy,path.data=path.data))
-# optimize(bmnegloglike,c(0,100),phy=phy,path.data=path.data)
+# while(min(phy$edge.length)<10){
+#   phy$edge.length<-1.005*phy$edge.length
+# }
+
+plot(phy)
+traits<-read.csv("/Users/djhwueng/Dropbox/CollabHoJhwueng/data/Niewiarowski.et.al_2004/trait.csv")
+head(traits)
+tip.states<-traits$egg.mass
+names(tip.states)<-phy$tip.label
+geiger.results<-fitContinuous(phy, tip.states, model="BM")
+sigma<-geiger.results$opt$sigsq
+sigma
+path.data<-sim.bb.path(sigma,tip.states=tip.states,phy=phy)
+result <-optimize(bmnegloglike,c(0,100),phy=phy,path.data=path.data)
+result   
+
+####Data 3 good, paramter estimate is closed to geiger
+phy <- read.tree("~/Dropbox/CollabHoJhwueng/data_we_will_use/webster.purvis_length/intree")
+plot(phy)
+
+#if(min(phy$edge.length)<1){
+#  if(min(phy$edge.length)==0){ phy$edge.length[which(phy$edge.length==0)]<-1e-5 }
+#  phy$edge.length <-  phy$edge.length *(1/min(phy$edge.length)+1)
+#}
+
+#while(min(phy$edge.length)<10){
+#  phy$edge.length<-1.005*phy$edge.length
+#}
+
+plot(phy)
+traits<-read.csv("~/Dropbox/CollabHoJhwueng/data_we_will_use/webster.purvis_length/purvis.length.csv")
+head(traits)
+tip.states<-traits$length.mm.
+names(tip.states)<-phy$tip.label
+geiger.results<-fitContinuous(phy, tip.states, model="BM")
+sigma<-geiger.results$opt$sigsq
+sigma
+path.data<-sim.bb.path(sigma,tip.states=tip.states,phy=phy)
+result <-optimize(bmnegloglike,c(0,100),phy=phy,path.data=path.data)
+result   
+
